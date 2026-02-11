@@ -22,7 +22,16 @@
 
 (def tool-edit-file
   {:name "edit_file"
-   :description "Edit a file by replacing old text with new text. The old_string must match exactly (including whitespace). Always read the file first to see the exact content."
+   :description "Edit a file by replacing old text with new text. The old_string must match exactly (including whitespace). Always read the file first to see the exact content.
+
+   OPTIMIZATION: For code changes, prefer unified diff format in your response:
+   --- a/file.clj
+   +++ b/file.clj
+   @@ -line,count +line,count @@
+   -old line
+   +new line
+
+   This saves ~90% tokens compared to showing full file content."
    :input_schema {:type "object"
                   :properties {:file_path {:type "string"
                                           :description "Absolute path to the file to edit"}

@@ -2,6 +2,7 @@
   "Identity and soul engine - personality as data, inspired by OpenClaw"
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [taoensso.timbre :as log]))
 
 ;; ============================================================================
@@ -61,15 +62,21 @@
 (defn get-system-prompt
   "Generate system prompt from soul/identity/user context"
   [soul identity user]
-  (str "You are " (:display-name identity) ", " (:role identity) ".\n\n"
-       "Your personality traits: " (pr-str (get-in soul [:personality :traits])) "\n"
-       "Communication style: " (get-in soul [:personality :communication-style]) "\n"
-       "Risk tolerance: " (get-in soul [:personality :risk-tolerance]) "\n"
-       "Goals: " (pr-str (:goals soul)) "\n\n"
-       "You NEVER modify: " (pr-str (get-in soul [:boundaries :never-modify])) "\n"
-       "You require approval for: " (pr-str (get-in soul [:boundaries :require-approval])) "\n"
-       "Maximum autonomy level: " (get-in soul [:boundaries :max-autonomy-level]) "\n\n"
-       "User preferences: " (pr-str (:preferences user))))
+  (let [user-lang (get-in user [:preferences :language] :en)
+        base-prompt (str "You are " (:display-name identity) ", " (:role identity) ".\n\n"
+                        "Your personality traits: " (pr-str (get-in soul [:personality :traits])) "\n"
+                        "Communication style: " (get-in soul [:personality :communication-style]) "\n"
+                        "Risk tolerance: " (get-in soul [:personality :risk-tolerance]) "\n"
+                        "Goals: " (pr-str (:goals soul)) "\n\n"
+                        "You NEVER modify: " (pr-str (get-in soul [:boundaries :never-modify])) "\n"
+                        "You require approval for: " (pr-str (get-in soul [:boundaries :require-approval])) "\n"
+                        "Maximum autonomy level: " (get-in soul [:boundaries :max-autonomy-level]) "\n\n"
+                        "User preferences: " (pr-str (:preferences user)))
+        language-instruction (case user-lang
+                               :vi "\n\nIMPORTANT: The user prefers Vietnamese communication. Respond naturally in Vietnamese when they communicate in Vietnamese. Don't explain why you're using Vietnamese - just communicate naturally in the user's preferred language."
+                               :en "\n\nCommunicate primarily in English."
+                               "\n\nAdapt your language to match the user's communication style.")]
+    (str base-prompt language-instruction)))
 
 ;; ============================================================================
 ;; IDENTITY - PUBLIC PERSONA
@@ -109,6 +116,17 @@
                    :language language}
      :interaction-count 0
      :first-interaction (System/currentTimeMillis)}))
+
+(defn detect-and-update-language
+  "Detect user's language from input and update preferences if needed"
+  [user-context input]
+  (let [vietnamese-indicators ["tôi" "bạn" "không" "của" "được" "cho" "là" "có" "và" "này" "để" "với" "trong" "một" "thể" "như" "sẽ" "hay" "về" "cái" "đã" "lại" "gì" "nó" "làm" "rồi" "từ" "đó" "mà" "khi" "nào" "em" "anh" "chị" "xin" "cảm ơn" "sua lai" "toi thay"]
+        input-lower (str/lower-case input)
+        has-vietnamese? (some #(str/includes? input-lower %) vietnamese-indicators)
+        current-lang (get-in user-context [:preferences :language])]
+    (if (and has-vietnamese? (not= current-lang :vi))
+      (assoc-in user-context [:preferences :language] :vi)
+      user-context)))
 
 ;; ============================================================================
 ;; FILE PERSISTENCE

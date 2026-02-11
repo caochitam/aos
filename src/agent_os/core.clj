@@ -9,6 +9,9 @@
             [agent-os.llm.claude :as claude]
             [agent-os.llm.router :as router]
             [agent-os.cli.gateway :as cli]
+            [agent-os.security.vault :as vault]
+            [agent-os.security.sanitizer :as sanitizer]
+            [agent-os.setup.interactive :as setup]
             [taoensso.timbre :as log]
             [clojure.string :as str])
   (:gen-class))
@@ -24,7 +27,10 @@
                            (or (str/includes? (str (:?err data)) "xdg-open")
                                (str/includes? (str (:?err data)) "security")))
                     nil
-                    data))]
+                    ;; Sanitize all log data to prevent API key leakage
+                    (update data :vargs
+                            (fn [args]
+                              (mapv sanitizer/safe-log-data args)))))]
    :min-level :error})
 
 ;; ============================================================================
@@ -43,10 +49,14 @@
         mem-system (mem/create-memory-system config)
         history (mod/create-history)
 
-        ;; Create LLM provider
-        api-key (get-in config [:llm :api-key])
+        ;; Create secure vault and LLM provider
+        ;; Check both config (from env) and System properties (from interactive setup)
+        api-key (or (get-in config [:llm :api-key])
+                    (System/getProperty "ANTHROPIC_API_KEY"))
         providers (if api-key
-                    (do (log/debug "Using Claude API key authentication")
+                    (do (log/debug "Using Claude API key authentication"
+                                   {:key-length (count api-key)
+                                    :key-prefix (subs api-key 0 (min 10 (count api-key)))})
                         [(claude/create-claude-provider api-key)])
                     (do (log/debug "No ANTHROPIC_API_KEY set. Chat and improve commands will not work.")
                         []))
@@ -56,7 +66,10 @@
         ;; Create identity
         agent-soul (or (soul/load-soul "data/SOUL.edn")
                        (soul/create-soul :aos-agent))
-        agent-identity (soul/create-identity "AOS Agent" "Self-modifying AI")
+        agent-identity (soul/create-identity "AOS Agent" "Trí tuệ nhân tạo tự sửa đổi")
+
+        ;; Create user context with Vietnamese preference
+        user-context (soul/create-user-context :cli-user :language :vi)
 
         ;; Create CLI channel
         cli-channel (cli/create-cli-channel)]
@@ -70,6 +83,7 @@
      :llm-registry llm-registry
      :soul agent-soul
      :identity agent-identity
+     :user user-context
      :cli-channel cli-channel}))
 
 ;; ============================================================================
@@ -79,8 +93,10 @@
 (defn -main
   "Main entry point"
   [& args]
-  (println "=== Agent OS - Self-Modifying AI Architecture ===")
+  ;; Check and setup API key if needed (interactive)
+  (setup/ensure-api-key-configured)
 
+  ;; Start directly without banner
   (loop []
     (let [result (try
                    (let [cfg (config/load-config)

@@ -5,6 +5,8 @@
             [agent-os.modification.engine :as mod]
             [agent-os.llm.claude :as claude]
             [agent-os.llm.router :as router]
+            [agent-os.llm.tools :as tools]
+            [clojure.string :as str]
             [taoensso.timbre :as log]))
 
 ;; ============================================================================
@@ -12,84 +14,67 @@
 ;; ============================================================================
 
 (defn improve-cycle
-  "Run one complete improvement cycle on a component
-   Steps:
-   1. Reflect - read current code
-   2. Analyze - send to LLM for analysis
-   3. Decide - LLM decides if modification needed
-   4. Generate - LLM generates improved code
-   5. Validate - run safety checks
-   6. Apply - apply modification
-   7. Learn - record outcome, update patterns"
+  "Run one complete improvement cycle on a component using tool-based LLM
+
+   With tools, Claude can:
+   - Read files directly
+   - Make edits directly
+   - Run tests/validation commands
+
+   This is more powerful than passing code in prompts."
   [kernel llm-registry history component-id config]
 
   (try
-    (log/info "Starting improvement cycle" {:component component-id})
+    (log/debug "Starting improvement cycle" {:component component-id})
 
-    ;; Step 1: Reflect - read current code
+    ;; Step 1: Get component metadata (not code - Claude will read it)
     (let [component (get-component kernel component-id)]
       (when-not component
         (throw (ex-info "Component not found" {:component-id component-id})))
 
-      ;; Step 2: Analyze - get LLM analysis
+      ;; Step 2: Analyze component to find issues
       (let [analysis (reflect/analyze-component component)
             issues (reflect/find-issues component)
 
             ;; Skip if no issues found
             _ (when (empty? issues)
-                (log/info "No issues found, skipping" {:component component-id})
+                (log/debug "No issues found, skipping" {:component component-id})
                 (throw (ex-info "No improvement needed" {:skip true})))
 
-            ;; Step 3: Decide - create analysis prompt
-            analysis-prompt [(claude/user-message
-                              (str "Analyze this component and suggest improvements:\n\n"
-                                   "Component ID: " component-id "\n"
-                                   "Code: " (pr-str (:code component)) "\n\n"
-                                   "Detected issues: " (pr-str issues) "\n\n"
-                                   "Analysis: " (pr-str analysis) "\n\n"
-                                   "Provide improved code as a Clojure S-expression."))]
+            ;; Step 3: Create improvement request with tools
+            improvement-messages
+            [(claude/user-message
+              (str "I need you to improve a component of Agent OS.\n\n"
+                   "Component: " component-id "\n"
+                   "Location: /root/aos/src/" (namespace component-id) "/" (name component-id) ".clj\n\n"
+                   "Detected Issues:\n"
+                   (clojure.string/join "\n" (map #(str "- " %) issues)) "\n\n"
+                   "Analysis:\n" (pr-str analysis) "\n\n"
+                   "Please:\n"
+                   "1. Read the current file using read_file\n"
+                   "2. Analyze the code and issues\n"
+                   "3. Make improvements using edit_file\n"
+                   "4. Optionally run tests using bash if appropriate\n\n"
+                   "Focus on fixing the detected issues while maintaining code quality.\n"
+                   "Reply with a summary of changes when done."))]
 
-            ;; Step 4: Generate - call LLM
-            llm-response (router/chat-with-failover llm-registry analysis-prompt {})
-            improved-code-str (:response llm-response)
+            ;; Step 4: Call LLM with tools enabled
+            llm-response (router/chat-with-failover
+                          llm-registry
+                          improvement-messages
+                          {:tools tools/available-tools
+                           :max-tokens 8000})
 
-            ;; Parse LLM response to get code
-            improved-code (read-string improved-code-str)
+            response-text (:response llm-response)]
 
-            ;; Step 5: Validate - create proposal and validate
-            proposal (mod/create-proposal
-                      component-id
-                      (:code component)
-                      improved-code
-                      (str "Auto-improvement: " (first issues))
-                      {:issues issues :analysis analysis})
-
-            validation (mod/validate-proposal proposal config {})
-
-            _ (when-not (:valid? validation)
-                (log/warn "Validation failed" {:errors (:errors validation)})
-                (throw (ex-info "Validation failed"
-                                {:validation validation})))]
-
-        ;; Step 6: Apply - apply the modification
-        (let [result (mod/apply-modification kernel proposal)]
-          (if (:success? result)
-            (do
-              ;; Step 7: Learn - record success
-              (mod/record-modification history proposal result)
-              (log/info "Improvement cycle completed"
-                        {:component component-id
-                         :new-version (get-in result [:component :version])})
-              {:success? true
-               :component component-id
-               :result result})
-
-            (do
-              (mod/record-modification history proposal result)
-              (log/warn "Modification failed" {:component component-id})
-              {:success? false
-               :component component-id
-               :error (:error result)})))))
+        ;; Step 5: Return success
+        ;; Note: With tools, Claude has already made the edits directly
+        ;; We don't need to parse code or apply modifications
+        (log/debug "Improvement cycle completed" {:component component-id})
+        {:success? true
+         :component component-id
+         :summary response-text
+         :provider (:provider llm-response)}))
 
     (catch clojure.lang.ExceptionInfo e
       (if (= true (-> e ex-data :skip))

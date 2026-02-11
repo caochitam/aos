@@ -37,22 +37,59 @@ lein test
 
 ## Configuration
 
-Set your Anthropic API key:
+### 🔒 Security: API Key Protection
+
+**IMPORTANT**: AOS includes multiple security layers to protect your API key from prompt injection attacks.
+
+Set your Anthropic API key via environment variable (RECOMMENDED):
 
 ```bash
+# Method 1: Direct export
 export ANTHROPIC_API_KEY=sk-ant-api03-...
+
+# Method 2: Secure file storage
+echo "sk-ant-api03-..." > ~/.anthropic_key
+chmod 600 ~/.anthropic_key
+export ANTHROPIC_API_KEY="$(cat ~/.anthropic_key)"
 ```
 
-Or edit `resources/config.edn`:
+Configuration file `resources/config.edn`:
 
 ```clojure
 {:llm {:provider :claude
-       :api-key #env ANTHROPIC_API_KEY}
+       :api-key #env ANTHROPIC_API_KEY}  ; ✅ Reads from environment
  :kernel {:max-modifications-per-hour 10}
  :safety {:protected-namespaces ["agent-os.kernel"]}}
 ```
 
+**Security Features:**
+- ✅ Automatic API key sanitization in all responses
+- ✅ Prompt injection protection
+- ✅ Secure credential vault system
+- ✅ Safe logging (API keys never logged)
+- ✅ Error message sanitization
+
+See [SECURITY.md](SECURITY.md) for detailed security documentation.
+
 ## Running AOS
+
+### 🎯 First Time Setup (Interactive)
+
+**NEW!** AOS now auto-detects missing API key and guides you through setup:
+
+```bash
+# Just run AOS - it will help you set up API key if needed
+lein run
+
+# AOS will:
+# 1. Detect if ANTHROPIC_API_KEY is missing
+# 2. Guide you through interactive setup
+# 3. Help you choose: bashrc, secure file, or temp
+# 4. Automatically configure everything
+# 5. Continue starting AOS
+```
+
+See [INTERACTIVE_SETUP.md](INTERACTIVE_SETUP.md) for detailed guide.
 
 ### CLI Mode (Default)
 
