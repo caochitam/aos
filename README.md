@@ -69,7 +69,7 @@ Configuration file `resources/config.edn`:
 - ✅ Safe logging (API keys never logged)
 - ✅ Error message sanitization
 
-See [SECURITY.md](SECURITY.md) for detailed security documentation.
+See [SECURITY.md](docs/SECURITY.md) for detailed security documentation.
 
 ## Running AOS
 
@@ -89,7 +89,7 @@ lein run
 # 5. Continue starting AOS
 ```
 
-See [INTERACTIVE_SETUP.md](INTERACTIVE_SETUP.md) for detailed guide.
+See [INTERACTIVE_SETUP.md](docs/guides/INTERACTIVE_SETUP.md) for detailed guide.
 
 ### CLI Mode (Default)
 
@@ -202,6 +202,18 @@ aos/
 - **Size Limits**: Code size restrictions
 - **Dangerous Symbol Detection**: Blocks eval, shell execution
 - **Rollback Capability**: All modifications can be reverted
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **[Quick Start](docs/QUICK_START.md)** - Get started in 5 minutes
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and components
+- **[Security Guide](docs/SECURITY.md)** - Security features and best practices
+- **[Dev Workflow](docs/DEV_WORKFLOW.md)** - Development workflow and auto-rebuild
+- **[Command Guide](docs/guides/AOS_COMMAND_GUIDE.md)** - All AOS commands
+- **[LLM Classification](docs/guides/LLM_BASED_CLASSIFICATION.md)** - Intelligent task routing
+- **[Full Index](docs/INDEX.md)** - Complete documentation index
 
 ## OpenClaw Integration Patterns
 
