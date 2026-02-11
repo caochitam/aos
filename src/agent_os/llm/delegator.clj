@@ -55,12 +55,13 @@
   (log/debug "Delegating to Claude Code" {:message message :dir working-dir})
 
   (try
-    (let [;; Call claude with message - non-interactive mode with permission bypass
+    (let [;; Call claude with message - non-interactive mode with accept edits
           ;; NOTE: --print mode for non-interactive execution
-          ;; NOTE: --permission-mode bypassPermissions works with root (unlike --dangerously-skip-permissions)
+          ;; NOTE: bypassPermissions blocked for root, so use acceptEdits instead
+          ;; acceptEdits auto-approves file edits but may prompt for dangerous operations
           result (shell/sh "claude"
                           "--print"  ; Non-interactive mode
-                          "--permission-mode" "bypassPermissions"  ; Auto-approve all actions
+                          "--permission-mode" "acceptEdits"  ; Auto-approve edit operations
                           message
                           :dir working-dir
                           :timeout 300000) ; 5 minutes timeout
