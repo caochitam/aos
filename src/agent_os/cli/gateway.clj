@@ -4,15 +4,60 @@
             [agent-os.reflection.engine :as reflect]
             [agent-os.modification.engine :as mod]
             [agent-os.memory.store :as mem]
+            [agent-os.memory.compaction :as compaction]
             [agent-os.identity.soul :as soul]
             [agent-os.improvement.loop :as improve]
             [agent-os.llm.router :as router]
+            [agent-os.llm.tools :as tools]
+            [agent-os.llm.delegator :as delegator]
             [clojure.string :as str]
             [clojure.pprint :refer [pprint]]
             [io.aviso.ansi :as ansi])
   (:import [jline.console ConsoleReader]
            [jline.console.completer StringsCompleter]
            [java.io File]))
+
+;; ============================================================================
+;; OPENCLAW OPTIMIZATION: Bootstrap File Caching
+;; ============================================================================
+
+(def ^:private session-cache
+  "Track sessions initialized with full system prompt. Saves ~880 tokens/message."
+  (atom #{}))
+
+(defn- session-initialized? [session-id]
+  (contains? @session-cache session-id))
+
+(defn- mark-session-initialized! [session-id]
+  (swap! session-cache conj session-id))
+
+;; ============================================================================
+;; OPENCLAW OPTIMIZATION: Lazy Tool Loading
+;; ============================================================================
+
+(defn- needs-tools?
+  "Detect if message requires tool usage. Returns false for simple chats."
+  [message]
+  (let [lower (str/lower-case message)]
+    (or
+      ;; File operations
+      (some #(str/includes? lower %)
+            ["file" "read" "edit" "sửa" "đọc" "xem" "tệp"])
+
+      ;; Code modifications
+      (some #(str/includes? lower %)
+            [".clj" "code" "function" "defn" "mã" "hàm"])
+
+      ;; System commands
+      (some #(str/includes? lower %)
+            ["run" "command" "bash" "lein" "test" "chạy" "lệnh"]))))
+
+(defn- select-tools
+  "Choose relevant tools based on message content. Saves 700 tokens for simple chats."
+  [message]
+  (if (needs-tools? message)
+    tools/available-tools  ; Include tools (700 tokens)
+    []))                   ; No tools (0 tokens)
 
 ;; ============================================================================
 ;; READLINE SETUP
@@ -60,7 +105,10 @@
        :timestamp (System/currentTimeMillis)}))
 
   (send-message [this message]
-    (println (:content message)))
+    (let [separator "──────────────────────────────────────────────────────────────────────────────────────────────────────────────"]
+      (println separator)
+      (println (:content message))
+      (println separator)))
 
   (channel-id [_] :cli)
 
@@ -152,16 +200,64 @@
 
 (defn cmd-chat [os-state message]
   (try
-    (let [llm-registry (:llm-registry os-state)
-          soul (:soul os-state)
-          identity (:identity os-state)
-          user (:user os-state)
-          system-prompt (soul/get-system-prompt soul identity user)
-          messages [{:role "user" :content message}]
-          result (router/chat-with-failover llm-registry messages {})]
-      (if (:success? result)
-        (:response result)
-        (ansi/red (str "Chat failed: " (:error result)))))
+    ;; Extract llm-registry first (needed for LLM-based classification)
+    (let [llm-registry (:llm-registry os-state)]
+
+      ;; LLM-BASED CLASSIFICATION: Use Haiku to decide delegation
+      ;; Cost: $0.000025/request - way cheaper than wrong model choice!
+      (if (delegator/should-delegate? message llm-registry)
+        ;; COMPLEX TASK: Delegate to Claude Code
+        (let [_ (println (ansi/yellow (delegator/format-delegation-message message)))
+              result (delegator/call-claude-code message "/root/aos")]
+          (delegator/format-completion-message result))
+
+        ;; SIMPLE/MODERATE TASK: Use AOS's own tools
+        (let [session-id (or (:session-id os-state) "default-session")
+
+              ;; OPENCLAW OPTIMIZATION: Bootstrap caching (93.5% savings)
+              ;; Full prompt only on first message (~200 tokens)
+              ;; Minimal prompt on subsequent messages (~20 tokens)
+              system-prompt (if (session-initialized? session-id)
+                             ;; Minimal prompt - session already has context
+                             "You are AOS. Communicate in Vietnamese by default."
+
+                             ;; Full prompt - first message only
+                             (do
+                               (mark-session-initialized! session-id)
+                               (str "You are AOS, an AI agent that helps users with tasks.\n\n"
+                                    "Communication: Respond in Vietnamese by default. "
+                                    "Use English only when explicitly requested or for technical code/commands.\n\n"
+                                    "Capabilities: You can read files, edit files, and run bash commands using tools when needed. "
+                                    "Use tools wisely to accomplish user requests.\n\n"
+                                    "Code modifications: Prefer unified diff format to save tokens:\n"
+                                    "--- a/file.clj\n"
+                                    "+++ b/file.clj\n"
+                                    "@@ -line,count +line,count @@\n"
+                                    "-old code\n"
+                                    "+new code\n\n"
+                                    "Working directory: /root/aos")))
+
+              messages [{:role "user" :content message}]
+
+              ;; OPENCLAW OPTIMIZATION: Lazy tool loading
+              ;; Only send tools when message actually needs them
+              tools-to-use (select-tools message)
+
+              ;; LLM-BASED MODEL ROUTING: Use Haiku to select tier (Haiku/Sonnet)
+              ;; Complex tasks already delegated above, so only :simple/:moderate here
+              model-tier (delegator/select-model-tier message llm-registry)
+              tier-config (get delegator/model-tiers model-tier)
+
+              result (router/chat-with-failover
+                      llm-registry
+                      messages
+                      {:system system-prompt
+                       :tools tools-to-use          ; Conditional tools
+                       :model (:model tier-config)  ; Dynamic model selection!
+                       :max-tokens (:max-tokens tier-config)})]
+          (if (:success? result)
+            (:response result)
+            (ansi/red (str "Chat failed: " (:error result)))))))
     (catch Exception e
       (ansi/red (str "Chat error: " (.getMessage e))))))
 
@@ -172,6 +268,10 @@
 (defn cmd-restart [_ _]
   ::restart)
 
+(defn cmd-exit [_ _]
+  (println (ansi/green "Goodbye!"))
+  ::exit)
+
 (def command-registry
   {"/help"        cmd-help
    "/status"      cmd-status
@@ -181,7 +281,8 @@
    "/improve"     cmd-improve
    "/history"     cmd-history
    "/soul"        cmd-soul
-   "/restart"     cmd-restart})
+   "/restart"     cmd-restart
+   "/exit"        cmd-exit})
 
 (defn parse-input
   "Parse input - slash command or chat message"
@@ -243,7 +344,6 @@
 (defn start-cli
   "Start interactive CLI REPL. Returns ::restart if restart requested, :exit otherwise."
   [os-state]
-  (println (ansi/bold-cyan "=== Agent OS - Self-Modifying AI ==="))
   (println (ansi/italic "Type /help for commands, or just chat directly"))
   (println)
 
@@ -279,6 +379,11 @@
                     (println (ansi/yellow "Restarting Agent OS..."))
                     (save-session-history new-history)
                     ::restart)
+
+                  (= output ::exit)
+                  (do
+                    (save-session-history new-history)
+                    :exit)
 
                   :else
                   (do

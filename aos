@@ -1,0 +1,117 @@
+#!/bin/bash
+# AOS Startup Script
+#
+# Features:
+# - Interactive API key setup (auto-detects missing key)
+# - Security sanitization (prompt injection protection)
+# - Persistent configuration
+#
+# Usage:
+#   ./aos           - Start AOS (fast mode if uberjar exists)
+#   ./aos --dev     - Force dev mode (use lein run)
+#   ./aos --rebuild - Rebuild uberjar and start
+#   ./aos --help    - Show this help
+
+set -e
+
+AOS_DIR="/root/aos"
+UBERJAR="$AOS_DIR/target/uberjar/agent-os-0.1.0-SNAPSHOT-standalone.jar"
+
+cd "$AOS_DIR"
+
+# Parse arguments
+case "${1:-}" in
+    --help|-h)
+        echo "AOS - Agent Operating System"
+        echo ""
+        echo "Usage:"
+        echo "  ./aos           Start AOS (interactive setup if needed)"
+        echo "  ./aos --dev     Force dev mode (lein run)"
+        echo "  ./aos --rebuild Rebuild uberjar and start"
+        echo "  ./aos --help    Show this help"
+        echo ""
+        echo "Features:"
+        echo "  ✓ Interactive API key setup"
+        echo "  ✓ Persistent configuration"
+        echo "  ✓ Security sanitization"
+        echo "  ✓ Prompt injection protection"
+        echo ""
+        echo "First-time setup:"
+        echo "  1. Run: ./aos"
+        echo "  2. Follow interactive prompts"
+        echo "  3. API key configured permanently!"
+        echo ""
+        exit 0
+        ;;
+
+    --dev)
+        echo "🔧 Starting AOS in dev mode (lein run)..."
+        exec lein run "${@:2}"
+        ;;
+
+    --rebuild)
+        echo "🔨 Rebuilding uberjar..."
+        lein uberjar
+        echo "✓ Rebuild complete"
+        echo ""
+        echo "🚀 Starting AOS..."
+        exec java -jar "$UBERJAR" "${@:2}"
+        ;;
+esac
+
+# Normal startup: prefer uberjar for speed, fallback to lein
+if [ -f "$UBERJAR" ]; then
+    # Quick check: is any core source file newer than JAR?
+    CORE_FILES=(
+        "src/agent_os/llm/delegator.clj"
+        "src/agent_os/cli/gateway.clj"
+        "src/agent_os/setup/interactive.clj"
+    )
+
+    NEEDS_REBUILD=false
+    for src_file in "${CORE_FILES[@]}"; do
+        if [ "$src_file" -nt "$UBERJAR" ]; then
+            NEEDS_REBUILD=true
+            break
+        fi
+    done
+
+    if [ "$NEEDS_REBUILD" = "true" ]; then
+        echo "⚠️  Code đã thay đổi - JAR cần rebuild!"
+        echo ""
+        echo "   Lựa chọn:"
+        echo "   [1] Rebuild ngay (recommended) - 30s"
+        echo "   [2] Dev mode lần này (slow startup)"
+        echo "   [3] Dùng JAR cũ (có thể bị lỗi)"
+        echo ""
+        read -p "Chọn [1-3, default=1]: " -n 1 -r choice
+        echo ""
+        echo ""
+
+        case "${choice:-1}" in
+            1)
+                echo "🔨 Rebuilding uberjar..."
+                lein uberjar
+                echo "✓ Rebuild hoàn tất!"
+                echo ""
+                ;;
+            2)
+                echo "🔧 Dev mode cho lần này..."
+                exec lein run "$@"
+                ;;
+            3)
+                echo "⚠️  CẢNH BÁO: Dùng JAR cũ - code bất đồng bộ!"
+                echo ""
+                ;;
+        esac
+    fi
+
+    # Fast startup with compiled uberjar
+    exec java -jar "$UBERJAR" "$@"
+else
+    # Dev mode (uberjar not built yet)
+    echo "ℹ️  First run - using dev mode (slower)"
+    echo "   Tip: Run './aos --rebuild' to build fast uberjar"
+    echo ""
+    exec lein run "$@"
+fi
