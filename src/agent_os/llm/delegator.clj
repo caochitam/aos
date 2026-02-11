@@ -55,11 +55,12 @@
   (log/debug "Delegating to Claude Code" {:message message :dir working-dir})
 
   (try
-    (let [;; Call claude with message - pre-approve tools for autonomous operation
-          ;; NOTE: Cannot use --dangerously-skip-permissions with root user
-          ;; Instead, pre-approve specific tools needed for AOS development
+    (let [;; Call claude with message - non-interactive mode with permission bypass
+          ;; NOTE: --print mode for non-interactive execution
+          ;; NOTE: --permission-mode bypassPermissions works with root (unlike --dangerously-skip-permissions)
           result (shell/sh "claude"
-                          "--allowedTools" "Read,Edit,Write,Bash,Glob,Grep,Task"
+                          "--print"  ; Non-interactive mode
+                          "--permission-mode" "bypassPermissions"  ; Auto-approve all actions
                           message
                           :dir working-dir
                           :timeout 300000) ; 5 minutes timeout
