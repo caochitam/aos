@@ -55,9 +55,9 @@
   (log/debug "Delegating to Claude Code" {:message message :dir working-dir})
 
   (try
-    (let [;; Call claude with message - auto-approve all actions
+    (let [;; Call claude with message - skip permissions for autonomous operation
           result (shell/sh "claude"
-                          "--dangerously-disable-sandbox"
+                          "--dangerously-skip-permissions"
                           message
                           :dir working-dir
                           :timeout 300000) ; 5 minutes timeout
