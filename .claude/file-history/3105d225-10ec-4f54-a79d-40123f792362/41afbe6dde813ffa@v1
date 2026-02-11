@@ -1,0 +1,484 @@
+# Agent OS - Self-Modifying AI Architecture
+
+## 🎯 Tổng Quan
+
+Agent OS là một kiến trúc cho phép AI Agent (sử dụng Claude Sonnet) **tự đọc hiểu và chỉnh sửa code của chính nó**. Được xây dựng trên Clojure/Lisp để tận dụng tính chất **homoiconicity** (code = data).
+
+### Tại Sao Chọn Clojure?
+
+1. **Code as Data**: Mọi code đều là S-expressions, dễ dàng parse và manipulate
+2. **Immutability**: An toàn hơn khi self-modifying
+3. **REPL-Driven**: Feedback loop nhanh cho AI experimentation
+4. **Simple Syntax**: AI chỉ cần hiểu 1 quy tắc: `(function arg1 arg2 ...)`
+
+## 🏗️ Kiến Trúc 8 Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 8: Safety & Constraints                              │
+│  - Safety checks before modification                        │
+│  - Prevent kernel modification                              │
+│  - Dependency validation                                    │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 7: Self-Improvement Loop                             │
+│  - Reflection → Identify → Analyze → Propose →              │
+│    Validate → Apply → Record                                │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 6: Learning & Memory                                 │
+│  - Modification history                                     │
+│  - Pattern analysis                                         │
+│  - Success/failure tracking                                 │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 5: Modification Engine                               │
+│  - Create modification proposals                            │
+│  - Validate new code                                        │
+│  - Apply changes safely                                     │
+│  - Rollback capability                                      │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 4: LLM Interface (Claude Sonnet)                     │
+│  - API communication                                        │
+│  - Prompt engineering                                       │
+│  - Response parsing                                         │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 3: Reflection Engine                                 │
+│  - Read own code                                            │
+│  - Analyze components                                       │
+│  - Understand system state                                  │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 2: Architecture Metadata                             │
+│  - Component specifications                                 │
+│  - Dependency graph                                         │
+│  - Capabilities & constraints                               │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 1: Core Kernel (IMMUTABLE)                           │
+│  - Boot/Shutdown                                            │
+│  - Validate modifications                                   │
+│  - Apply modifications                                      │
+│  - KHÔNG THỂ SỬA ĐỔI                                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 📦 Cấu Trúc Dữ Liệu Chính
+
+### 1. Component Specification
+
+```clojure
+{:id :memory-manager
+ :purpose "Quản lý bộ nhớ của agent"
+ :interfaces #{:store :retrieve :search}
+ :dependencies #{:vector-db}
+ :modifiable? true
+ :code '(defn memory-manager [operation data] ...)
+ :version 1
+ :created-at 1234567890}
+```
+
+### 2. Architecture Schema
+
+```clojure
+{:system-id ::agent-os
+ :version "0.1.0"
+ :components {:memory-manager {...}
+              :reflection-engine {...}
+              :modification-engine {...}}
+ :capabilities #{:self-reflection :self-modification :learning}
+ :constraints [{:type :safety :rule "Cannot modify kernel"}]}
+```
+
+### 3. Modification Proposal
+
+```clojure
+{:id "mod-1234567890"
+ :component-id :memory-manager
+ :old-code '(defn old-fn [x] x)
+ :new-code '(defn new-fn [x] (* x 2))
+ :reason "Performance improvement"
+ :metadata {:type :optimization}
+ :timestamp 1234567890
+ :status :proposed}
+```
+
+## 🔄 Workflow Self-Modification
+
+### Bước 1: Reflection (Tự Phân Tích)
+
+```clojure
+;; Agent đọc code của chính nó
+(def component-code (read-own-code :memory-manager arch))
+
+;; Phân tích cấu trúc
+(def analysis (analyze-component :memory-manager arch))
+;; => {:id :memory-manager
+;;     :structure {:type 'defn, :name 'memory-manager, ...}
+;;     :dependencies #{:vector-db}}
+```
+
+### Bước 2: Identify Issues (Tìm Vấn Đề)
+
+```clojure
+;; Gọi Claude API để phân tích
+(def claude-analysis 
+  (call-claude-for-analysis 
+    api-key 
+    arch 
+    :memory-manager))
+
+;; Claude trả về:
+;; {:analysis "Component performs well but could be optimized"
+;;  :suggestions ["Add caching" "Use transducers"]
+;;  :confidence 0.85}
+```
+
+### Bước 3: Propose Changes (Đề Xuất Thay Đổi)
+
+```clojure
+;; Gọi Claude để tạo code mới
+(def new-code-proposal
+  (call-claude-for-modification
+    api-key
+    arch
+    :memory-manager
+    "Add caching layer"))
+
+;; Claude tạo code mới:
+;; {:new-code '(defn memory-manager-v2 
+;;               [operation data]
+;;               (let [cache (atom {})]
+;;                 (if-let [cached (@cache [operation data])]
+;;                   cached
+;;                   (let [result (compute operation data)]
+;;                     (swap! cache assoc [operation data] result)
+;;                     result))))
+;;  :explanation "Added memoization for performance"
+;;  :confidence 0.9}
+```
+
+### Bước 4: Validate (Kiểm Tra)
+
+```clojure
+;; Validate syntax
+(def validation (validate-new-code new-code))
+;; => {:valid? true, :code '(...)}
+
+;; Safety check
+(def safety (safety-check arch modification))
+;; => {:safe? true}
+```
+
+### Bước 5: Apply (Áp Dụng)
+
+```clojure
+;; Apply modification
+(def result (apply-modification-safe arch modification))
+
+;; Nếu thành công:
+;; {:success? true
+;;  :architecture <new-arch>
+;;  :rollback-data <old-component>}
+
+;; Architecture mới có version tăng lên:
+;; {:id :memory-manager
+;;  :code '(defn memory-manager-v2 ...)
+;;  :version 2
+;;  :previous-version '(defn memory-manager ...)}
+```
+
+### Bước 6: Record & Learn (Ghi Nhận & Học)
+
+```clojure
+;; Ghi lại modification
+(record-modification history modification result)
+
+;; Phân tích patterns
+(analyze-modification-patterns history)
+;; => {:total-modifications 10
+;;     :successful 8
+;;     :failed 2
+;;     :success-rate 0.8
+;;     :frequent-modifications {:memory-manager 3, :reflection-engine 2}}
+```
+
+## 🚀 Cách Sử Dụng
+
+### Setup
+
+```bash
+# Clone repository
+git clone <repo>
+
+# Install Clojure
+# macOS: brew install clojure
+# Linux: sudo apt install clojure
+
+# Start REPL
+clj
+```
+
+### Basic Usage
+
+```clojure
+;; Load Agent OS
+(load-file "agent-os-architecture.clj")
+
+;; Tạo Agent OS mới
+(def os (create-agent-os :llm-api-key "your-anthropic-api-key"))
+
+;; Xem system state
+(get-system-state (:architecture os))
+
+;; Phân tích một component
+(analyze-component :memory-manager (:architecture os))
+
+;; Run self-improvement cycle (simplified)
+(def improved-os 
+  (->AgentOS 
+    (self-improvement-cycle 
+      (:architecture os) 
+      (:llm-client os) 
+      (:history os))
+    (:history os)
+    (:llm-client os)))
+```
+
+### Advanced: Custom Component
+
+```clojure
+;; Tạo component mới
+(def my-component
+  (component-spec
+    :task-planner
+    "AI task planning và scheduling"
+    #{:plan :schedule :optimize}
+    #{:memory-manager}
+    :modifiable? true
+    :code '(defn task-planner
+             [tasks]
+             (sort-by :priority tasks))))
+
+;; Thêm vào architecture
+(def arch-with-planner
+  (assoc-in (:architecture os)
+            [:components :task-planner]
+            my-component))
+
+;; Update Agent OS
+(def os-v2 (->AgentOS arch-with-planner (:history os) (:llm-client os)))
+```
+
+## 🛡️ Safety Mechanisms
+
+### 1. Kernel Protection
+```clojure
+;; Kernel KHÔNG THỂ được sửa đổi
+(validate-modification os {:component-id :kernel ...})
+;; => {:safe? false, :reason "Cannot modify kernel"}
+```
+
+### 2. Dependency Validation
+```clojure
+;; Phải maintain dependency graph
+;; Nếu component A depends on B, không được xóa B
+```
+
+### 3. Code Validation
+```clojure
+;; Code mới phải là valid Clojure S-expression
+(validate-new-code '(defn valid-fn [x] x))  ;; ✅
+(validate-new-code "invalid string")        ;; ❌
+```
+
+### 4. Rollback Capability
+```clojure
+;; Mọi modification đều có thể rollback
+(def rolled-back 
+  (rollback-modification 
+    (:architecture os) 
+    :memory-manager))
+```
+
+## 🧠 Integration với Claude Sonnet
+
+### Prompt Engineering cho Self-Reflection
+
+```clojure
+;; System prompt cho Claude
+"Bạn là một AI Agent đang phân tích kiến trúc của chính mình.
+
+SYSTEM STATE:
+{:architecture {...}
+ :components [:memory-manager :reflection-engine :modification-engine]
+ :total-components 3}
+
+ANALYZING COMPONENT: :memory-manager
+{:id :memory-manager
+ :purpose \"Quản lý bộ nhớ của agent\"
+ :structure {:type defn, :name memory-manager, ...}
+ :dependencies #{:vector-db}}
+
+Hãy phân tích component này và đề xuất cải tiến nếu cần.
+Response format:
+{:analysis \"...\",
+ :suggestions [...],
+ :confidence 0.0-1.0}"
+```
+
+### Prompt Engineering cho Code Generation
+
+```clojure
+"Bạn đang sửa đổi component: :memory-manager
+
+CURRENT CODE:
+(defn memory-manager [operation data]
+  (case operation
+    :store (store-memory data)
+    :retrieve (retrieve-memory data)))
+
+PROPOSED CHANGE:
+Add caching layer for frequently accessed data
+
+REASON:
+Improve performance for repeated queries
+
+Hãy tạo NEW CODE dưới dạng Clojure S-expression.
+Response phải là VALID Clojure code có thể eval.
+Format: {:new-code '(...), :explanation \"...\"}"
+```
+
+### API Call Example
+
+```clojure
+(require '[clj-http.client :as http])
+(require '[cheshire.core :as json])
+
+(defn call-claude-api
+  [api-key messages]
+  (let [response (http/post "https://api.anthropic.com/v1/messages"
+                   {:headers {"x-api-key" api-key
+                             "anthropic-version" "2023-06-01"
+                             "content-type" "application/json"}
+                    :body (json/generate-string
+                            {:model "claude-sonnet-4-20250514"
+                             :max_tokens 4000
+                             :messages messages})})]
+    (-> response :body (json/parse-string true))))
+```
+
+## 📊 Monitoring & Analytics
+
+### Modification Statistics
+
+```clojure
+;; Xem statistics
+(analyze-modification-patterns history)
+;; => {:total-modifications 50
+;;     :successful 42
+;;     :failed 8
+;;     :success-rate 0.84
+;;     :frequent-modifications 
+;;       {:memory-manager 15
+;;        :reflection-engine 12
+;;        :modification-engine 10
+;;        :task-planner 8}}
+```
+
+### Component Health
+
+```clojure
+(defn component-health
+  [arch component-id]
+  (let [component (get-in arch [:components component-id])
+        mod-count (count-modifications component-id history)]
+    {:version (:version component)
+     :last-modified (:modified-at component)
+     :total-modifications mod-count
+     :stability (/ 1.0 (inc mod-count))}))
+```
+
+## 🎯 Use Cases
+
+### 1. Performance Optimization
+Agent tự động phát hiện bottlenecks và optimize code
+
+### 2. Bug Fixing
+Agent phát hiện lỗi trong runtime và tự fix
+
+### 3. Feature Addition
+Agent tự động thêm capabilities mới khi cần
+
+### 4. Architecture Refactoring
+Agent cải thiện structure của chính nó theo best practices
+
+## 🔮 Future Enhancements
+
+### Phase 2: Advanced Features
+- [ ] Multi-agent collaboration (agents modify each other)
+- [ ] Genetic algorithms for code evolution
+- [ ] A/B testing for modifications
+- [ ] Automatic benchmark và performance tracking
+
+### Phase 3: Distribution
+- [ ] Distributed Agent OS cluster
+- [ ] Code sharing giữa các agents
+- [ ] Collective learning
+
+### Phase 4: Meta-Learning
+- [ ] Agent học cách học tốt hơn
+- [ ] Meta-optimization của optimization strategies
+- [ ] Emergent behaviors
+
+## 🔒 Security Considerations
+
+1. **Sandboxing**: Chạy modifications trong isolated environment
+2. **Rate Limiting**: Giới hạn số modifications per time period
+3. **Human Approval**: Critical modifications cần approval
+4. **Audit Trail**: Log tất cả modifications
+5. **Kill Switch**: Emergency shutdown mechanism
+
+## 📚 References
+
+### Papers & Research
+- "Self-Modifying Systems—AI Security" 
+- Darwin Gödel Machine (Sakana AI)
+- Claude Code Architecture (Anthropic)
+
+### Inspiration
+- LISP homoiconicity
+- Smalltalk self-modifying environments
+- Synthesis kernel (Alexia Massalin)
+
+## 🤝 Contributing
+
+Đóng góp ý tưởng về:
+- Safety mechanisms
+- Optimization strategies
+- Use cases
+- Integration với other AI models
+
+## 📝 License
+
+MIT License - Free to use and modify
+
+---
+
+**Agent OS** - Where AI becomes its own architect 🏗️🤖

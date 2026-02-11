@@ -1,0 +1,10 @@
+ ✻ Welcome to Claude Code for VS Code                                                                                                                                                                                      
+ installed extension v2.1.39                                                                                                                                                                                               
+                                                                                                                                                                                                                           
+ • Claude has context of ⧉ open files and ⧉ selected lines                                                                                                                                                               
+
+ • Review Claude Code's changes +11 -22 in the comfort of your IDE
+
+ • Cmd+Esc for Quick Launch
+
+ • Ctrl+Alt+K to reference files or lines in your input

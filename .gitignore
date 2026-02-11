@@ -1,0 +1,30 @@
+# Leiningen / Clojure
+/target
+/classes
+/checkouts
+*.jar
+*.class
+/.lein-*
+/.nrepl-port
+.hgignore
+.hg/
+
+# Runtime data (file-first memory)
+/data/
+*.edn.bak
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

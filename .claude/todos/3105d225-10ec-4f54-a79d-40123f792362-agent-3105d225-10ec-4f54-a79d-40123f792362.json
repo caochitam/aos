@@ -1,0 +1,17 @@
+[
+  {
+    "content": "Move .claude/ directory to /root/aos/",
+    "status": "in_progress",
+    "activeForm": "Moving .claude/ directory to /root/aos/"
+  },
+  {
+    "content": "Move .claude.json to /root/aos/",
+    "status": "pending",
+    "activeForm": "Moving .claude.json to /root/aos/"
+  },
+  {
+    "content": "Clean up .claude.json.backup.* files",
+    "status": "pending",
+    "activeForm": "Cleaning up backup files"
+  }
+]

@@ -1,0 +1,25 @@
+{:llm {:provider :claude
+       :model "claude-sonnet-4-20250514"
+       :max-tokens 4000
+       :api-key #env ANTHROPIC_API_KEY}
+
+ :kernel {:immutable true
+          :max-modifications-per-hour 10}
+
+ :memory {:base-path "data/"
+          :memory-file "MEMORY.edn"
+          :daily-log-dir "memory/"
+          :history-dir "history/"
+          :max-context-tokens 150000
+          :flush-threshold 0.8}
+
+ :heartbeat {:enabled false
+             :interval-ms 1800000
+             :standing-instructions []}
+
+ :safety {:protected-namespaces ["agent-os.kernel"]
+          :max-code-size-bytes 50000
+          :allowed-requires #{"clojure.string" "clojure.set" "clojure.edn"}}
+
+ :cli {:prompt "aos> "
+       :history-file "data/.cli-history"}}

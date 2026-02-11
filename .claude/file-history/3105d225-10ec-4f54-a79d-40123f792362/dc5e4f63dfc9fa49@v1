@@ -1,0 +1,475 @@
+;; ============================================================================
+;; AGENT OS - Self-Modifying AI Architecture
+;; ============================================================================
+;; Kiến trúc cho phép AI Agent hiểu và chỉnh sửa chính nó
+;; Được thiết kế để sử dụng với Claude Sonnet làm LLM engine
+;; 
+;; Nguyên tắc thiết kế:
+;; 1. Code as Data (Homoiconicity) - Mọi thứ đều là S-expressions
+;; 2. Immutable State - Mọi thay đổi tạo version mới
+;; 3. Self-Reflection - Agent có thể đọc và phân tích code của chính nó
+;; 4. Safe Modification - Mọi thay đổi đều được validate và có thể rollback
+;; ============================================================================
+
+(ns agent-os.core
+  (:require [clojure.spec.alpha :as s]
+            [clojure.walk :as walk]))
+
+;; ============================================================================
+;; LAYER 1: CORE KERNEL (Immutable - Không thể sửa đổi)
+;; ============================================================================
+;; Đây là kernel tối thiểu, được bảo vệ khỏi self-modification
+
+(def ^:const KERNEL_VERSION "0.1.0")
+
+(defprotocol IKernel
+  "Core kernel protocol - không thể sửa đổi"
+  (boot [this] "Khởi động hệ thống")
+  (shutdown [this] "Tắt hệ thống an toàn")
+  (validate-modification [this change] "Kiểm tra tính hợp lệ của thay đổi")
+  (apply-modification [this change] "Áp dụng thay đổi đã validate"))
+
+;; ============================================================================
+;; LAYER 2: ARCHITECTURE METADATA
+;; ============================================================================
+;; Mô tả kiến trúc của hệ thống dưới dạng data
+
+(def architecture-schema
+  "Schema mô tả kiến trúc hệ thống"
+  {:system-id ::agent-os
+   :version KERNEL_VERSION
+   :components {}  ; Map of component-id -> component-spec
+   :capabilities #{} ; Set of capabilities
+   :constraints []}) ; List of constraints
+
+(defn component-spec
+  "Tạo spec cho một component"
+  [id purpose interfaces dependencies & {:keys [modifiable? code]}]
+  {:id id
+   :purpose purpose
+   :interfaces (set interfaces)
+   :dependencies (set dependencies)
+   :modifiable? (or modifiable? true)
+   :code code  ; Actual Clojure code as data
+   :created-at (System/currentTimeMillis)
+   :version 1})
+
+;; ============================================================================
+;; LAYER 3: REFLECTION ENGINE
+;; ============================================================================
+;; Cho phép agent đọc và hiểu code của chính nó
+
+(defn read-own-code
+  "Đọc source code của component"
+  [component-id architecture]
+  (get-in architecture [:components component-id :code]))
+
+(defn analyze-component
+  "Phân tích cấu trúc của một component"
+  [component-id architecture]
+  (let [component (get-in architecture [:components component-id])
+        code (:code component)]
+    {:id component-id
+     :purpose (:purpose component)
+     :structure (if code
+                  {:type (first code)
+                   :name (second code)
+                   :params (if (= 'defn (first code))
+                             (nth code 2)
+                             nil)
+                   :body (if (= 'defn (first code))
+                           (drop 3 code)
+                           (rest code))}
+                  nil)
+     :dependencies (:dependencies component)
+     :interfaces (:interfaces component)}))
+
+(defn get-system-state
+  "Lấy toàn bộ state hiện tại của hệ thống"
+  [architecture]
+  {:architecture architecture
+   :components (keys (:components architecture))
+   :total-components (count (:components architecture))
+   :modifiable-components (count (filter :modifiable? 
+                                          (vals (:components architecture))))})
+
+;; ============================================================================
+;; LAYER 4: LLM INTERFACE (Claude Sonnet)
+;; ============================================================================
+;; Interface để giao tiếp với Claude API
+
+(defn llm-request-schema
+  "Schema cho request tới Claude"
+  []
+  {:model "claude-sonnet-4-20250514"  ; Sử dụng Sonnet 4 mới nhất
+   :max_tokens 4000
+   :messages []})
+
+(defn prepare-self-reflection-prompt
+  "Chuẩn bị prompt cho agent tự phân tích"
+  [architecture component-id]
+  (let [component (analyze-component component-id architecture)
+        system-state (get-system-state architecture)]
+    {:role "user"
+     :content (str 
+               "Bạn là một AI Agent đang phân tích kiến trúc của chính mình.\n\n"
+               "SYSTEM STATE:\n"
+               (pr-str system-state) "\n\n"
+               "ANALYZING COMPONENT: " component-id "\n"
+               (pr-str component) "\n\n"
+               "Hãy phân tích component này và đề xuất cải tiến nếu cần.")}))
+
+(defn prepare-modification-prompt
+  "Chuẩn bị prompt để agent tự sửa đổi code"
+  [architecture component-id proposed-change reason]
+  (let [current-code (read-own-code component-id architecture)]
+    {:role "user"
+     :content (str
+               "Bạn đang sửa đổi component: " component-id "\n\n"
+               "CURRENT CODE:\n"
+               (pr-str current-code) "\n\n"
+               "PROPOSED CHANGE:\n"
+               proposed-change "\n\n"
+               "REASON:\n"
+               reason "\n\n"
+               "Hãy tạo NEW CODE dưới dạng Clojure S-expression."
+               "Response phải là VALID Clojure code có thể eval.")}))
+
+;; ============================================================================
+;; LAYER 5: MODIFICATION ENGINE
+;; ============================================================================
+;; Cho phép agent sửa đổi code của chính nó một cách an toàn
+
+(defn create-modification
+  "Tạo một modification proposal"
+  [component-id old-code new-code reason metadata]
+  {:id (str "mod-" (System/currentTimeMillis))
+   :component-id component-id
+   :old-code old-code
+   :new-code new-code
+   :reason reason
+   :metadata metadata
+   :timestamp (System/currentTimeMillis)
+   :status :proposed})
+
+(defn validate-new-code
+  "Validate code mới trước khi apply"
+  [new-code]
+  (try
+    ;; Kiểm tra syntax bằng cách read code
+    (read-string (pr-str new-code))
+    ;; Kiểm tra xem có phải valid S-expression không
+    (when-not (list? new-code)
+      (throw (ex-info "Code must be a valid S-expression" {:code new-code})))
+    {:valid? true :code new-code}
+    (catch Exception e
+      {:valid? false 
+       :error (.getMessage e)
+       :code new-code})))
+
+(defn apply-modification-safe
+  "Áp dụng modification với rollback capability"
+  [architecture modification]
+  (let [{:keys [component-id new-code]} modification
+        validation (validate-new-code new-code)]
+    (if (:valid? validation)
+      (let [old-component (get-in architecture [:components component-id])
+            new-component (assoc old-component
+                                :code new-code
+                                :version (inc (:version old-component))
+                                :modified-at (System/currentTimeMillis)
+                                :previous-version (:code old-component))]
+        {:success? true
+         :architecture (assoc-in architecture 
+                                 [:components component-id] 
+                                 new-component)
+         :rollback-data old-component})
+      {:success? false
+       :error (:error validation)
+       :architecture architecture})))
+
+(defn rollback-modification
+  "Rollback về version trước"
+  [architecture component-id]
+  (let [component (get-in architecture [:components component-id])
+        previous-code (:previous-version component)]
+    (if previous-code
+      (assoc-in architecture 
+                [:components component-id :code] 
+                previous-code)
+      architecture)))
+
+;; ============================================================================
+;; LAYER 6: LEARNING & MEMORY
+;; ============================================================================
+;; Lưu trữ lịch sử modifications và học từ chúng
+
+(defn modification-history
+  "Lưu trữ lịch sử các modifications"
+  []
+  (atom {:modifications []
+         :successful []
+         :failed []}))
+
+(defn record-modification
+  "Ghi lại một modification"
+  [history modification result]
+  (swap! history update 
+         (if (:success? result) :successful :failed)
+         conj
+         (assoc modification :result result)))
+
+(defn analyze-modification-patterns
+  "Phân tích patterns từ modification history"
+  [history]
+  (let [all-mods (:modifications @history)]
+    {:total-modifications (count all-mods)
+     :successful (count (:successful @history))
+     :failed (count (:failed @history))
+     :success-rate (if (pos? (count all-mods))
+                     (/ (count (:successful @history)) 
+                        (count all-mods))
+                     0)
+     :frequent-modifications (frequencies 
+                              (map :component-id all-mods))}))
+
+;; ============================================================================
+;; LAYER 7: SELF-IMPROVEMENT LOOP
+;; ============================================================================
+;; Main loop cho phép agent tự cải thiện
+
+(defn self-improvement-cycle
+  "Một cycle của self-improvement"
+  [architecture llm-client history]
+  ;; 1. REFLECTION: Phân tích state hiện tại
+  (let [system-state (get-system-state architecture)
+        
+        ;; 2. IDENTIFY: Tìm component cần cải thiện
+        target-component (first (keys (:components architecture)))
+        
+        ;; 3. ANALYZE: Phân tích component
+        analysis (analyze-component target-component architecture)
+        
+        ;; 4. PROPOSE: Đề xuất modification (gọi Claude API)
+        ;; (Simplified - trong thực tế sẽ gọi Claude API thật)
+        proposed-change {:type :optimization
+                        :description "Improve performance"}
+        
+        ;; 5. VALIDATE: Kiểm tra modification
+        modification (create-modification 
+                      target-component
+                      (:code analysis)
+                      '(defn improved-fn [x] (* x 2)) ; Example new code
+                      "Performance improvement"
+                      proposed-change)
+        
+        ;; 6. APPLY: Áp dụng nếu valid
+        result (apply-modification-safe architecture modification)]
+    
+    ;; 7. RECORD: Ghi lại kết quả
+    (record-modification history modification result)
+    
+    ;; 8. RETURN: Trả về architecture mới
+    (if (:success? result)
+      (:architecture result)
+      architecture)))
+
+;; ============================================================================
+;; LAYER 8: SAFETY & CONSTRAINTS
+;; ============================================================================
+;; Đảm bảo agent không tự phá hủy hoặc vi phạm constraints
+
+(defn safety-check
+  "Kiểm tra safety constraints"
+  [architecture modification]
+  (let [{:keys [component-id]} modification
+        component (get-in architecture [:components component-id])]
+    (cond
+      ;; Không được sửa kernel
+      (= component-id :kernel)
+      {:safe? false :reason "Cannot modify kernel"}
+      
+      ;; Không được sửa component non-modifiable
+      (false? (:modifiable? component))
+      {:safe? false :reason "Component is not modifiable"}
+      
+      ;; Kiểm tra dependencies
+      (not (every? #(contains? (:components architecture) %)
+                   (:dependencies component)))
+      {:safe? false :reason "Missing dependencies"}
+      
+      :else
+      {:safe? true})))
+
+;; ============================================================================
+;; EXAMPLE ARCHITECTURE
+;; ============================================================================
+;; Ví dụ về một architecture cụ thể
+
+(def example-architecture
+  (-> architecture-schema
+      (assoc-in [:components :memory-manager]
+                (component-spec
+                 :memory-manager
+                 "Quản lý bộ nhớ của agent"
+                 #{:store :retrieve :search}
+                 #{:vector-db}
+                 :modifiable? true
+                 :code '(defn memory-manager
+                         [operation data]
+                         (case operation
+                           :store (store-memory data)
+                           :retrieve (retrieve-memory data)
+                           :search (search-memory data)))))
+      
+      (assoc-in [:components :reflection-engine]
+                (component-spec
+                 :reflection-engine
+                 "Cho phép agent tự phân tích"
+                 #{:analyze :reflect :introspect}
+                 #{:memory-manager}
+                 :modifiable? true
+                 :code '(defn reflection-engine
+                         [target]
+                         (analyze-component target @architecture))))
+      
+      (assoc-in [:components :modification-engine]
+                (component-spec
+                 :modification-engine
+                 "Thực hiện self-modification"
+                 #{:validate :apply :rollback}
+                 #{:reflection-engine :memory-manager}
+                 :modifiable? true
+                 :code '(defn modification-engine
+                         [change]
+                         (when (validate-modification change)
+                           (apply-modification change)))))
+      
+      (assoc-in [:capabilities]
+                #{:self-reflection
+                  :self-modification
+                  :learning
+                  :rollback})
+      
+      (assoc-in [:constraints]
+                [{:type :safety
+                  :rule "Cannot modify kernel"}
+                 {:type :dependencies
+                  :rule "Must maintain dependency graph"}
+                 {:type :validation
+                  :rule "All modifications must pass validation"}])))
+
+;; ============================================================================
+;; USAGE EXAMPLES
+;; ============================================================================
+
+(comment
+  ;; Initialize system
+  (def arch example-architecture)
+  (def history (modification-history))
+  
+  ;; Xem system state
+  (get-system-state arch)
+  ;; => {:architecture {...}, :components [...], :total-components 3, ...}
+  
+  ;; Phân tích một component
+  (analyze-component :memory-manager arch)
+  ;; => {:id :memory-manager, :purpose "...", :structure {...}, ...}
+  
+  ;; Tạo modification proposal
+  (def mod (create-modification
+            :memory-manager
+            '(defn old-fn [x] x)
+            '(defn new-fn [x] (* x 2))
+            "Improve performance"
+            {:type :optimization}))
+  
+  ;; Validate và apply
+  (def result (apply-modification-safe arch mod))
+  (:success? result) ;; => true
+  
+  ;; Record result
+  (record-modification history mod result)
+  
+  ;; Analyze patterns
+  (analyze-modification-patterns history)
+  
+  ;; Rollback nếu cần
+  (def rolled-back (rollback-modification (:architecture result) 
+                                          :memory-manager))
+  
+  ;; Run self-improvement cycle
+  (def improved-arch (self-improvement-cycle arch nil history))
+  )
+
+;; ============================================================================
+;; CLAUDE API INTEGRATION
+;; ============================================================================
+;; Integration với Claude Sonnet API (cần API key)
+
+(defn call-claude-for-analysis
+  "Gọi Claude API để phân tích component"
+  [api-key architecture component-id]
+  ;; Trong thực tế, sẽ gọi API thật
+  ;; Đây là placeholder
+  {:analysis "Component performs well"
+   :suggestions ["Consider caching"]
+   :confidence 0.85})
+
+(defn call-claude-for-modification
+  "Gọi Claude API để tạo code mới"
+  [api-key architecture component-id change-description]
+  ;; Trong thực tế, sẽ gọi API và parse response
+  {:new-code '(defn improved-function [x] (* x 2))
+   :explanation "Optimized for performance"
+   :confidence 0.9})
+
+;; ============================================================================
+;; MAIN AGENT OS
+;; ============================================================================
+
+(defrecord AgentOS [architecture history llm-client]
+  IKernel
+  (boot [this]
+    (println "Agent OS booting...")
+    (println "Version:" KERNEL_VERSION)
+    (println "Components:" (count (:components architecture)))
+    this)
+  
+  (shutdown [this]
+    (println "Agent OS shutting down safely...")
+    (println "Final state:" (get-system-state architecture))
+    nil)
+  
+  (validate-modification [this change]
+    (let [safety (safety-check architecture change)
+          validation (validate-new-code (:new-code change))]
+      (and (:safe? safety) (:valid? validation))))
+  
+  (apply-modification [this change]
+    (let [result (apply-modification-safe architecture change)]
+      (when (:success? result)
+        (record-modification history change result))
+      (->AgentOS (:architecture result) history llm-client))))
+
+(defn create-agent-os
+  "Tạo instance mới của Agent OS"
+  [& {:keys [custom-architecture llm-api-key]}]
+  (let [arch (or custom-architecture example-architecture)
+        hist (modification-history)
+        llm-client (when llm-api-key 
+                     {:api-key llm-api-key})]
+    (boot (->AgentOS arch hist llm-client))))
+
+;; ============================================================================
+;; STARTUP
+;; ============================================================================
+
+(defn -main []
+  (println "=== Agent OS - Self-Modifying AI Architecture ===")
+  (println "Starting Agent OS...")
+  (let [os (create-agent-os)]
+    (println "\nAgent OS is ready!")
+    (println "Use REPL to interact with the system")
+    (println "Try: (get-system-state (:architecture os))")
+    os))

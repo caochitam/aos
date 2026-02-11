@@ -1,0 +1,6 @@
+{:user-id :default-user
+ :preferences {:approval-mode :critical-only
+               :notification-level :important
+               :language :vi}
+ :interaction-count 0
+ :first-interaction 1770776900000}
