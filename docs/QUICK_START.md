@@ -1,209 +1,278 @@
-# AOS Quick Start - Setup API Key Lâu Dài
+# AOS Quick Start Guide
 
-## 🚀 Setup Nhanh (2 phút)
+Get AOS running in 5 minutes!
 
-### Bước 1: Chạy Script Tự Động
+---
+
+## 🚀 Quick Start (Recommended)
+
+### Step 1: Clone & Setup
 
 ```bash
 cd /root/aos
-./setup_api_key.sh
+lein deps  # Install dependencies
 ```
 
-Script sẽ hỏi bạn chọn phương thức và tự động setup!
-
-### Bước 2: Chọn Phương Thức
-
-```
-1. Add to ~/.bashrc (Recommended) ← CHỌN CÁI NÀY
-2. Use secure file with chmod 600
-3. Add to ~/.profile (System-wide)
-4. Use systemd environment.d (Advanced)
-```
-
-**Khuyến nghị:** Chọn số **1** hoặc **2** (an toàn nhất)
-
-### Bước 3: Nhập API Key
-
-Khi được hỏi, paste API key của bạn:
-```
-Enter your Anthropic API key: sk-ant-api03-xxxxx...
-```
-
-### Bước 4: Reload Config
+### Step 2: Run AOS (Interactive Setup)
 
 ```bash
-source ~/.bashrc
+./aos
 ```
 
-### Bước 5: Kiểm Tra
+**NEW!** AOS automatically detects missing API key and guides you through setup:
 
-```bash
-# Xem API key đã được set chưa
-echo $ANTHROPIC_API_KEY
+```
+⚠️  No ANTHROPIC_API_KEY found
 
-# Nếu thấy: sk-ant-api03-... thì OK! ✅
+AOS can help you set up your API key now.
+
+Would you like to set up your API key now? (Y/n): y
+
+Please enter your Anthropic API key:
+API Key: sk-ant-api03-xxxxx...
+         ^^^^^ YOU SEE THIS AS YOU TYPE ^^^^^
+
+✓ API key accepted
+  Prefix: sk-ant-api03-...
+
+Where should AOS save this API key?
+
+[1] ~/.bashrc (auto-load every terminal) ← RECOMMENDED
+[2] Secure file (~/.anthropic_key, chmod 600)
+[3] This session only (temporary)
+
+Choice [1-3]: 1
+
+✓ API key added to ~/.bashrc
+✓ Configuration updated
+
+Reload your shell or run: source ~/.bashrc
+
+🚀 Starting AOS...
 ```
 
-### Bước 6: Chạy AOS
+See [Interactive Setup Guide](guides/INTERACTIVE_SETUP.md) for detailed walkthrough.
+
+### Step 3: Start Using AOS
 
 ```bash
-lein run
+# After interactive setup, just run:
+./aos
+
+# AOS CLI starts:
+Type /help for commands, or just chat directly
+
+aos>
 ```
 
 ---
 
-## 📝 Setup Thủ Công (Nếu không dùng script)
+## 🎯 Development Modes
 
-### Phương Pháp 1: Thêm trực tiếp vào ~/.bashrc
+### Production Mode (Fast Startup)
 
 ```bash
-# 1. Mở file
-nano ~/.bashrc
+./aos
+# → Runs from compiled JAR (~0.5s startup)
+# → Auto-detects if rebuild needed
+```
 
-# 2. Thêm vào cuối file:
-export ANTHROPIC_API_KEY="sk-ant-api03-YOUR-KEY-HERE"
+### Dev Mode (Always Latest Code)
 
-# 3. Save: Ctrl+O, Enter, Ctrl+X
+```bash
+./aos --dev
+# → Runs from source via lein (~3-5s startup)
+# → Code changes immediately reflected
+```
 
-# 4. Reload
+### Rebuild After Code Changes
+
+```bash
+./aos --rebuild
+# → Rebuilds JAR with latest code
+# → Then starts AOS
+```
+
+**See:** [Dev Workflow Guide](DEV_WORKFLOW.md) for details on auto-rebuild detection.
+
+---
+
+## 💬 Basic Usage
+
+### Chat Directly
+
+```bash
+aos> xin chào
+# AOS responds in Vietnamese by default
+
+aos> xem file README
+# AOS reads and displays file content
+
+aos> giải thích code trong core.clj
+# AOS analyzes and explains code
+```
+
+### Slash Commands
+
+```bash
+aos> /help              # Show all commands
+aos> /status            # System status
+aos> /components        # List components
+aos> /memory            # View memory
+aos> /soul              # View agent personality
+aos> /exit              # Exit
+```
+
+**See:** [Command Guide](guides/AOS_COMMAND_GUIDE.md) for complete command reference.
+
+---
+
+## 🔧 Manual API Key Setup (If Interactive Setup Skipped)
+
+### Method 1: Environment Variable (Recommended)
+
+```bash
+# Add to ~/.bashrc
+echo 'export ANTHROPIC_API_KEY="sk-ant-api03-YOUR-KEY-HERE"' >> ~/.bashrc
 source ~/.bashrc
 
-# 5. Test
+# Verify
 echo $ANTHROPIC_API_KEY
 ```
 
-### Phương Pháp 2: Dùng File Riêng (An toàn hơn)
+### Method 2: Secure File
 
 ```bash
-# 1. Tạo file key (chỉ owner đọc được)
+# Create secure key file
 echo "sk-ant-api03-YOUR-KEY-HERE" > ~/.anthropic_key
 chmod 600 ~/.anthropic_key
 
-# 2. Thêm loader vào ~/.bashrc
+# Add loader to ~/.bashrc
 cat >> ~/.bashrc << 'EOF'
-
 # Load Anthropic API Key
 if [ -f ~/.anthropic_key ]; then
     export ANTHROPIC_API_KEY="$(cat ~/.anthropic_key)"
 fi
 EOF
 
-# 3. Reload
 source ~/.bashrc
+```
 
-# 4. Test
-echo $ANTHROPIC_API_KEY
+### Method 3: Temporary (Current Session Only)
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-api03-YOUR-KEY-HERE"
+./aos
 ```
 
 ---
 
-## ✅ Verification Checklist
+## ✅ Verification
 
 ```bash
-# 1. Check environment variable
-[ -n "$ANTHROPIC_API_KEY" ] && echo "✅ API key is set" || echo "❌ API key NOT set"
+# Check API key is set
+[ -n "$ANTHROPIC_API_KEY" ] && echo "✅ API key is set" || echo "❌ Not set"
 
-# 2. Check key format
-[[ "$ANTHROPIC_API_KEY" =~ ^sk-ant- ]] && echo "✅ Valid format" || echo "❌ Invalid format"
+# Check key format
+[[ "$ANTHROPIC_API_KEY" =~ ^sk-ant-api03- ]] && echo "✅ Valid format" || echo "❌ Invalid"
 
-# 3. Check persistence (open new terminal and run)
-echo $ANTHROPIC_API_KEY
-# Should still show your key
-
-# 4. Test AOS
-cd /root/aos && lein run
-# Should start without "No ANTHROPIC_API_KEY" error
+# Test AOS
+./aos
+# Should start without errors
 ```
 
 ---
 
 ## 🔍 Troubleshooting
 
-### Vấn Đề: Terminal mới không thấy API key
+### Issue: API key not found in new terminal
 
-**Nguyên nhân:** File config chưa được reload
-
-**Giải pháp:**
+**Solution:**
 ```bash
-# Kiểm tra file nào được load
-echo $SHELL  # Nếu là /bin/bash, dùng .bashrc
-
-# Reload thủ công
+# Reload bashrc
 source ~/.bashrc
 
-# Hoặc đóng terminal và mở lại
+# Or close and reopen terminal
 ```
 
-### Vấn Đề: API key có nhưng AOS báo lỗi
+### Issue: "Code đã thay đổi - JAR cần rebuild!"
 
-**Kiểm tra:**
+This is normal! AOS detected source code changes.
+
+**Options:**
+```
+[1] Rebuild ngay (30s) ← Choose this
+[2] Dev mode lần này
+[3] Dùng JAR cũ (not recommended)
+```
+
+**See:** [Dev Workflow Guide](DEV_WORKFLOW.md)
+
+### Issue: AOS starts but responses are slow
+
+**Possible causes:**
+- First message (loading model)
+- Complex task (using Opus instead of Haiku)
+- Network latency
+
+**Check:**
 ```bash
-# 1. Key có đúng format không?
-echo $ANTHROPIC_API_KEY | grep "^sk-ant"
-
-# 2. Key có bị thừa khoảng trắng không?
-echo "$ANTHROPIC_API_KEY" | wc -c  # Should be ~96 characters
-
-# 3. Trim whitespace
-export ANTHROPIC_API_KEY=$(echo $ANTHROPIC_API_KEY | tr -d '[:space:]')
-```
-
-### Vấn Đề: Muốn đổi API key
-
-**Giải pháp:**
-```bash
-# Option 1: Edit trực tiếp
-nano ~/.bashrc
-# Tìm dòng ANTHROPIC_API_KEY và sửa
-
-# Option 2: Nếu dùng file riêng
-echo "sk-ant-NEW-KEY" > ~/.anthropic_key
-
-# Reload
-source ~/.bashrc
+aos> /status
+# Shows which model tier is being used
 ```
 
 ---
 
-## 🔒 Security Best Practices
+## 🔒 Security Notes
 
-✅ **DO (NÊN):**
-- Set qua environment variables
-- Dùng chmod 600 cho key files
-- Rotate keys định kỳ (30-90 ngày)
-- Thêm `~/.anthropic_key` vào `.gitignore`
-- Backup key file (encrypted) nếu cần
+- ✅ API key automatically sanitized in all responses
+- ✅ Prompt injection protection enabled
+- ✅ Safe logging (keys never logged)
+- ✅ Secure file permissions (600)
 
-❌ **DON'T (KHÔNG NÊN):**
-- Hard-code trong source code
-- Commit vào git
-- Share qua Slack/email
-- Set qua /etc/environment (system-wide)
-- Log API key ra console
+**See:** [Security Guide](SECURITY.md) for detailed security features.
 
 ---
 
-## 🎯 TL;DR (Quá Dài Không Đọc)
+## 📚 Next Steps
+
+**Getting Started:**
+1. ✅ You're here! Quick Start
+2. 📖 [Command Guide](guides/AOS_COMMAND_GUIDE.md) - Learn all commands
+3. 🏗️ [Architecture](ARCHITECTURE.md) - Understand how AOS works
+
+**Development:**
+1. 🔧 [Dev Workflow](DEV_WORKFLOW.md) - Development best practices
+2. 🤖 [LLM Classification](guides/LLM_BASED_CLASSIFICATION.md) - How task routing works
+3. 📊 [Reports](reports/) - Technical reports and analysis
+
+**Reference:**
+- [Full Documentation Index](INDEX.md)
+- [Security Audit Report](reports/SECURITY_AUDIT_REPORT.md)
+- [GitHub Issues](https://github.com/your-repo/issues) - Report bugs
+
+---
+
+## 🎯 TL;DR (Too Long; Didn't Read)
 
 ```bash
-# One-liner setup (paste cái này và chạy):
-echo "export ANTHROPIC_API_KEY='sk-ant-api03-YOUR-KEY-HERE'" >> ~/.bashrc && source ~/.bashrc && echo "✅ Done! Test: \$ANTHROPIC_API_KEY"
+# 1. Clone
+cd /root/aos
 
-# Verify
-echo $ANTHROPIC_API_KEY
+# 2. Install deps
+lein deps
 
-# Run AOS
-cd /root/aos && lein run
+# 3. Run (interactive setup)
+./aos
+
+# 4. Follow prompts to set API key
+
+# 5. Start chatting!
+aos> xin chào
 ```
 
----
-
-## 📚 Đọc Thêm
-
-- [SECURITY.md](SECURITY.md) - Chi tiết về bảo mật
-- [README.md](README.md) - Hướng dẫn đầy đủ
-- Script: `./setup_api_key.sh` - Setup tự động
+**That's it!** 🎉
 
 ---
 
-**Có vấn đề?** Open issue hoặc check logs tại `/tmp/aos-setup.log`
+**Having issues?** Check [Troubleshooting](#troubleshooting) or open an issue.
