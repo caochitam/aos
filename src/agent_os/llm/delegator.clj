@@ -1,9 +1,14 @@
 (ns agent-os.llm.delegator
   "Smart task delegation - simple tasks use AOS tools, complex tasks use Claude Code"
   (:require [clojure.java.shell :as shell]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [agent-os.llm.router :as router]
-            [taoensso.timbre :as log]))
+            [agent-os.protocols :refer [IProgressReporter report-start report-progress report-complete]]
+            [taoensso.timbre :as log])
+  (:import [java.lang ProcessBuilder Process]
+           [java.io BufferedReader InputStreamReader]
+           [java.util.concurrent TimeUnit]))
 
 ;; ============================================================================
 ;; OPENCLAW OPTIMIZATION: Three-Tier Model Routing
@@ -48,42 +53,107 @@
 ;; CLAUDE CODE DELEGATION
 ;; ============================================================================
 
+(defn format-delegation-message
+  "Format message to show user that task is being delegated"
+  [message]
+  (str "🔄 Đây là tác vụ phức tạp. Đang chuyển cho Claude Code xử lý...\n"
+       "Yêu cầu: " message "\n"))
+
+(defn format-completion-message
+  "Format Claude Code output for display"
+  [result]
+  (if (:success? result)
+    (str "✅ Claude Code đã hoàn thành!\n\n"
+         (:output result))
+    (str "❌ Claude Code gặp lỗi:\n"
+         (:error result))))
+
 (defn call-claude-code
-  "Delegate complex task to Claude Code CLI
+  "Delegate complex task to Claude Code CLI with progress reporting
+
+   Parameters:
+   - message: Task description for Claude Code
+   - working-dir: Working directory path
+   - reporter: IProgressReporter implementation for progress updates
+
    Returns {:success? bool :output string :error string}"
-  [message working-dir]
+  [message working-dir reporter]
   (log/debug "Delegating to Claude Code" {:message message :dir working-dir})
 
+  ;; Report start
+  (report-start reporter (format-delegation-message message))
+
   (try
-    (let [;; Call claude with message - non-interactive mode with accept edits
+    (let [;; Build process for Claude Code
           ;; NOTE: --print mode for non-interactive execution
           ;; NOTE: bypassPermissions blocked for root, so use acceptEdits instead
           ;; acceptEdits auto-approves file edits but may prompt for dangerous operations
-          result (shell/sh "claude"
-                          "--print"  ; Non-interactive mode
-                          "--permission-mode" "acceptEdits"  ; Auto-approve edit operations
-                          message
-                          :dir working-dir
-                          :timeout 300000) ; 5 minutes timeout
+          pb (ProcessBuilder. ["claude"
+                               "--print"
+                               "--permission-mode" "acceptEdits"
+                               message])
+          _ (.directory pb (io/file working-dir))
+          process (.start pb)
 
-          output (str (:out result) (:err result))
-          success? (zero? (:exit result))]
+          ;; Capture output
+          output-buffer (StringBuilder.)
+          reader (BufferedReader. (InputStreamReader. (.getInputStream process)))
+          error-reader (BufferedReader. (InputStreamReader. (.getErrorStream process)))
 
-      (if success?
-        (do
-          (log/debug "Claude Code completed successfully")
-          {:success? true
-           :output output})
-        (do
-          (log/error "Claude Code failed" {:exit (:exit result)})
-          {:success? false
-           :error output})))
+          ;; Start time for progress tracking
+          start-time (System/currentTimeMillis)
+
+          ;; Background thread to monitor progress
+          monitor-future
+          (future
+            (try
+              (loop []
+                (when (.isAlive process)
+                  (Thread/sleep 5000)  ; Check every 5 seconds
+                  (let [elapsed-seconds (quot (- (System/currentTimeMillis) start-time) 1000)]
+                    (report-progress reporter
+                                     (format "Claude Code đang xử lý... (%ds)" elapsed-seconds)))
+                  (recur)))
+              (catch InterruptedException _
+                nil)))]
+
+      ;; Read output line by line
+      (loop []
+        (when-let [line (.readLine reader)]
+          (.append output-buffer line)
+          (.append output-buffer "\n")
+          (recur)))
+
+      ;; Wait for process completion (max 5 minutes)
+      (let [completed? (.waitFor process 300 TimeUnit/SECONDS)
+            exit-code (.exitValue process)
+            output (.toString output-buffer)
+            success? (and completed? (zero? exit-code))]
+
+        ;; Cancel monitor
+        (future-cancel monitor-future)
+
+        ;; Report completion
+        (let [result (if success?
+                       (do
+                         (log/debug "Claude Code completed successfully")
+                         {:success? true
+                          :output output})
+                       (do
+                         (log/error "Claude Code failed" {:exit exit-code})
+                         {:success? false
+                          :error output}))]
+          (report-complete reporter (format-completion-message result))
+          result)))
 
     (catch Exception e
       (log/error e "Failed to call Claude Code")
-      {:success? false
-       :error (str "Không thể gọi Claude Code: " (.getMessage e)
-                   "\nĐảm bảo Claude Code CLI đã được cài đặt.")})))
+      (let [error-msg (str "Không thể gọi Claude Code: " (.getMessage e)
+                          "\nĐảm bảo Claude Code CLI đã được cài đặt.")
+            result {:success? false
+                    :error error-msg}]
+        (report-complete reporter (format-completion-message result))
+        result))))
 
 ;; ============================================================================
 ;; LLM-BASED CLASSIFICATION (Meta-Cognition)
@@ -185,18 +255,3 @@
   This solves the 'bỏ vs thêm' problem - LLM understands Vietnamese context."
   [message llm-registry]
   (= :complex (classify-task-with-llm message llm-registry)))
-
-(defn format-delegation-message
-  "Format message to show user that task is being delegated"
-  [message]
-  (str "🔄 Đây là tác vụ phức tạp. Đang chuyển cho Claude Code xử lý...\n"
-       "Yêu cầu: " message "\n"))
-
-(defn format-completion-message
-  "Format Claude Code output for display"
-  [result]
-  (if (:success? result)
-    (str "✅ Claude Code đã hoàn thành!\n\n"
-         (:output result))
-    (str "❌ Claude Code gặp lỗi:\n"
-         (:error result))))

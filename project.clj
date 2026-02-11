@@ -15,6 +15,8 @@
                  [aero "1.1.6"]              ; config management
                  [com.taoensso/timbre "6.3.1"]   ; logging
                  [ring/ring-core "1.10.0"]   ; HTTP server (future API)
+                 [ring/ring-jetty-adapter "1.10.0"] ; Jetty adapter for Ring
+                 [ring/ring-json "0.5.1"]    ; JSON middleware for Ring
                  [metosin/reitit "0.7.0"]    ; routing (future API)
                  [jline/jline "2.14.6"]      ; readline with history & completion
                  [io.aviso/pretty "1.4.4"]]  ; colored output

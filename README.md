@@ -203,12 +203,31 @@ aos/
 - **Dangerous Symbol Detection**: Blocks eval, shell execution
 - **Rollback Capability**: All modifications can be reverted
 
+## 🤖 Zalo Bot Integration
+
+**NEW!** AOS can now communicate with users via Zalo Official Account:
+
+```bash
+# Quick start
+./start-zalo-bot.sh
+```
+
+Features:
+- ✅ Receive and reply to messages from Zalo users
+- ✅ Full AI capabilities via Zalo chat
+- ✅ Automatic webhook server
+- ✅ Typing indicators & great UX
+- ✅ Persistent memory of conversations
+
+See **[Zalo Integration Guide](docs/guides/ZALO_INTEGRATION.md)** for complete setup instructions.
+
 ## 📚 Documentation
 
 Comprehensive documentation is available in the `docs/` directory:
 
 - **[Quick Start](docs/QUICK_START.md)** - Get started in 5 minutes
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and components
+- **[Zalo Integration](docs/guides/ZALO_INTEGRATION.md)** - Connect AOS to Zalo bot
 - **[Security Guide](docs/SECURITY.md)** - Security features and best practices
 - **[Dev Workflow](docs/DEV_WORKFLOW.md)** - Development workflow and auto-rebuild
 - **[Command Guide](docs/guides/AOS_COMMAND_GUIDE.md)** - All AOS commands

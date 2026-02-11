@@ -12,6 +12,7 @@
             [agent-os.security.vault :as vault]
             [agent-os.security.sanitizer :as sanitizer]
             [agent-os.setup.interactive :as setup]
+            [agent-os.integrations.zalo.server :as zalo-server]
             [taoensso.timbre :as log]
             [clojure.string :as str])
   (:gen-class))
@@ -100,8 +101,27 @@
   (loop []
     (let [result (try
                    (let [cfg (config/load-config)
-                         os (create-agent-os cfg)]
-                     (cli/start-cli os))
+                         os (create-agent-os cfg)
+
+                         ;; Start Zalo webhook server if enabled
+                         zalo-server (when (get-in cfg [:zalo :enabled])
+                                      (try
+                                        (log/info "Starting Zalo webhook server...")
+                                        (let [zalo-config (:zalo cfg)
+                                              zalo-context {:kernel (:kernel os)
+                                                          :llm-registry (:llm-registry os)
+                                                          :memory (:mem-system os)
+                                                          :config cfg}
+                                              server (zalo-server/start-server zalo-context zalo-config)]
+                                          (log/info "✓ Zalo bot integration started")
+                                          server)
+                                        (catch Exception e
+                                          (log/error "Failed to start Zalo server:" (.getMessage e))
+                                          (println "⚠ Warning: Zalo bot could not start. Continuing with CLI only.")
+                                          nil)))]
+
+                     ;; Store server in os context for restart handling
+                     (cli/start-cli (assoc os :zalo-server zalo-server)))
 
                    (catch Exception e
                      (log/error e "Agent OS failed to start")

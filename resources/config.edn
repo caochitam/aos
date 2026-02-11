@@ -22,4 +22,14 @@
           :allowed-requires #{"clojure.string" "clojure.set" "clojure.edn"}}
 
  :cli {:prompt "aos> "
-       :history-file "data/.cli-history"}}
+       :history-file "data/.cli-history"}
+
+ :zalo {:enabled false
+        :port 3000
+        :app-id #env ZALO_APP_ID
+        :access-token #env ZALO_ACCESS_TOKEN
+        :refresh-token #env ZALO_REFRESH_TOKEN
+        :secret-key #env ZALO_SECRET_KEY
+        :webhook-url ""
+        :auto-reply true
+        :welcome-message "Xin chào! Tôi là AOS - một AI agent tự cải tiến. Tôi có thể giúp gì cho bạn?"}}

@@ -1,6 +1,7 @@
 (ns agent-os.cli.gateway
   "Admin CLI Gateway - implements IChannel protocol"
   (:require [agent-os.kernel.protocols :refer [IChannel receive-message send-message status list-components get-component]]
+            [agent-os.protocols :refer [IProgressReporter]]
             [agent-os.reflection.engine :as reflect]
             [agent-os.modification.engine :as mod]
             [agent-os.memory.store :as mem]
@@ -120,6 +121,30 @@
   (map->CLIChannel {:state (atom {})}))
 
 ;; ============================================================================
+;; CLI PROGRESS REPORTER
+;; ============================================================================
+
+(defrecord CLIReporter [last-update-time]
+  IProgressReporter
+  (report-start [_ message]
+    (println (ansi/yellow message)))
+
+  (report-progress [this status]
+    ;; CLI can handle frequent updates - update every 5 seconds
+    (when (or (nil? @last-update-time)
+              (> (- (System/currentTimeMillis) @last-update-time) 5000))
+      (println (ansi/italic (str "  ⏳ " status)))
+      (reset! last-update-time (System/currentTimeMillis))))
+
+  (report-complete [_ result]
+    (println result)))
+
+(defn create-cli-reporter
+  "Create CLI progress reporter with 5-second update interval"
+  []
+  (->CLIReporter (atom nil)))
+
+;; ============================================================================
 ;; COMMAND REGISTRY
 ;; ============================================================================
 
@@ -206,10 +231,11 @@
       ;; LLM-BASED CLASSIFICATION: Use Haiku to decide delegation
       ;; Cost: $0.000025/request - way cheaper than wrong model choice!
       (if (delegator/should-delegate? message llm-registry)
-        ;; COMPLEX TASK: Delegate to Claude Code
-        (let [_ (println (ansi/yellow (delegator/format-delegation-message message)))
-              result (delegator/call-claude-code message "/root/aos")]
-          (delegator/format-completion-message result))
+        ;; COMPLEX TASK: Delegate to Claude Code with progress reporting
+        (let [reporter (create-cli-reporter)]
+          (delegator/call-claude-code message "/root/aos" reporter)
+          ;; Return empty string - reporter already printed everything
+          "")
 
         ;; SIMPLE/MODERATE TASK: Use AOS's own tools
         (let [session-id (or (:session-id os-state) "default-session")
@@ -297,6 +323,19 @@
       ;; Chat message
       {:type :chat
        :message trimmed})))
+
+(defn process-chat-message
+  "Process chat message and return response text.
+   Used by both CLI and external integrations (e.g. Zalo bot).
+
+   Parameters:
+   - message: User message text
+   - context: Map with :kernel, :llm-registry, :memory, :config
+
+   Returns:
+   - Response text string"
+  [message context]
+  (cmd-chat context message))
 
 (defn dispatch-input
   "Dispatch input - either slash command or chat"
