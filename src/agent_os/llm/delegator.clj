@@ -55,9 +55,11 @@
   (log/debug "Delegating to Claude Code" {:message message :dir working-dir})
 
   (try
-    (let [;; Call claude with message - skip permissions for autonomous operation
+    (let [;; Call claude with message - pre-approve tools for autonomous operation
+          ;; NOTE: Cannot use --dangerously-skip-permissions with root user
+          ;; Instead, pre-approve specific tools needed for AOS development
           result (shell/sh "claude"
-                          "--dangerously-skip-permissions"
+                          "--allowedTools" "Read,Edit,Write,Bash,Glob,Grep,Task"
                           message
                           :dir working-dir
                           :timeout 300000) ; 5 minutes timeout
